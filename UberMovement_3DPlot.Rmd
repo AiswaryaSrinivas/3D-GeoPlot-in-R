@@ -1,0 +1,132 @@
+---
+title: "3D Geoplotting using Uber Movement Data"
+output: html_notebook
+---
+
+In this notebook, we will look at how we can build 3D Geo Maps in R. For this we will take Uber Movement Data in Bangalore 
+
+```{r}
+library(ggplot2)
+library(ggmap)
+#devtools::install_github("tylermorganwall/rayshader")  #Use this to install Rayshader. The package from CRAN gives error when running plot_gg
+
+#chhattisgarh,Jammu and kashmir, Pondicherry -> Pudhucherry, uttarakhand to Uttanchal, Odisha to Orissa
+
+library(Hmisc)
+library(rayshader)
+library(rgdal)
+library(RColorBrewer)
+library(data.table)
+library(dplyr)
+library(sf)
+library(viridis)
+#library(RJSONIO)
+library(jsonlite)
+
+```
+To download the data from https://movement.uber.com/ - We will look at aggregate data of Travel Times by Hour of Day for all days for Q1 2019
+
+```{r}
+setwd("/Users/aiswarya/DataScienceArena/BRUG Workshop/")
+
+travel_time=read.csv("data/bangalore-wards-2019-1-All-HourlyAggregate.csv")
+
+print("Dimensions of the Data ")
+
+print(dim(travel_time))
+
+print("Columns in the Data ")
+
+print(colnames(travel_time))
+```
+The data has columns sourceid and dstid, which represents the source and destination wards. hod is the hour of the day along with the means and standard deviation of the travel time. Let us understand the data a little better
+
+```{r}
+unique_wards=unique(travel_time$sourceid)
+print("Number of Unique Source Wards ")
+
+print(length(unique_wards))
+
+unique_wards_dst=unique(travel_time$dstid)
+print("Number of Unique Destination Wards ")
+
+print(length(unique_wards_dst))
+```
+We will look at what is the Average Travel Time from a particular Ward
+```{r}
+travel_time=data.table(travel_time)
+
+src_avg_travel_time=travel_time %>%group_by(sourceid) %>%summarize(Avg_Travel_Time_From_Wards=mean(mean_travel_time,na.rm=TRUE))
+```
+
+We need to map the source and destination id to zone. The zone data can also be downloaded from uber movement
+```{r}
+zone_json=fromJSON("data/bangalore_wards.json")
+ward_data=zone_json$features
+ward_data=ward_data$properties
+ward_data$MOVEMENT_ID<-as.integer(ward_data$MOVEMENT_ID)
+
+travel_time=merge(travel_time,ward_data,by.x='sourceid',by.y='MOVEMENT_ID',all.x=T)
+dim(travel_time)
+
+travel_time=travel_time %>% 
+  rename(
+     Source_WARD_NO=WARD_NO,
+    Source_WARD_NAME=WARD_NAME ,
+    Source_DISPLAY_NAME=DISPLAY_NAME
+    )
+
+
+travel_time=merge(travel_time,ward_data,by.x='dstid',by.y='MOVEMENT_ID',all.x=T)
+
+
+travel_time=travel_time %>% 
+  rename(
+     DST_WARD_NO=WARD_NO,
+    DST_WARD_NAME=WARD_NAME ,
+    DST_DISPLAY_NAME=DISPLAY_NAME
+    )
+
+src_avg_travel_time=merge(src_avg_travel_time,ward_data,by.x='sourceid',by.y='MOVEMENT_ID',all.x=T)
+```
+
+
+
+Let us look at how we can plot this data to understand traffic patterns in Bangalore. For this we need to download the Shape file of Bangalore. To download the shape files from this link: https://github.com/openbangalore/bangalore/tree/master/bangalore/GIS 
+
+
+
+We can see that  blr_map has 198 elements. Merge the wards data with the data
+```{r}
+blr = st_read("data/bbmpwards/bbmpwards.shp", quiet = TRUE)
+
+source_blr=merge(blr,src_avg_travel_time,by='WARD_NO',all.x=T)
+
+
+
+
+```
+
+Let us map the Average Median Travel Time from a particular war
+
+```{r}
+gg_src_blr = ggplot(source_blr) +
+  geom_sf(aes(fill = Avg_Travel_Time_From_Wards)) +
+  scale_fill_viridis("Avg_Travel_Time_From_Wards") +
+  ggtitle("Average Median Travel Time from a Particular Ward") +
+  theme_bw()
+
+gg_src_blr
+```
+
+Let us make this plot a 3D plot. It is very simple usinf RayShader Library - pass the ggplot object to plot_gg() function. 
+
+```{r}
+plot_gg(gg_src_blr, multicore = TRUE, width = 6 ,height=2.7, fov = 70)
+
+
+render_movie(filename = "plot_1",frames = 480,fps=60,phi=60,theta=45)
+
+```
+
+
