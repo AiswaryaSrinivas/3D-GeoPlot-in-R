@@ -3,7 +3,7 @@ title: "3D Geoplotting using Uber Movement Data"
 output: html_notebook
 ---
 
-In this notebook, we will look at how we can build 3D Geo Maps in R. For this we will take Uber Movement Data in Bangalore 
+In this notebook, we will look at how we can build 3D Plots in R. Let us make this plot a 3D plot. Using Rayshader, building 3D plots are easy. The depth of the plot is based on the fill variable
 
 ```{r}
 library(ggplot2)
@@ -24,6 +24,77 @@ library(viridis)
 library(jsonlite)
 
 ```
+
+### A Basic Introduction
+
+Before we go to Maps, let us look at how we can make simple plots into 3D in R
+
+```{r}
+gg = ggplot(diamonds, aes(x, depth)) +
+  stat_density_2d(aes(fill = stat(nlevel)), 
+                  geom = "polygon",
+                  n = 100,bins = 10,contour = TRUE) +
+  facet_wrap(clarity~.) +
+  scale_fill_viridis_c(option = "A")
+plot_gg(gg,multicore=TRUE,width=5,height=5,scale=250)
+
+
+```
+
+
+Look at Death Probability vs Age and Year for USA
+
+```{r}
+#Data from Social Security administration
+death = read.csv("https://www.tylermw.com/data/death.csv", skip = 1)
+meltdeath = reshape2::melt(death, id.vars = "Year")
+
+meltdeath$age = as.numeric(meltdeath$variable)
+deathgg = ggplot(meltdeath) +
+  geom_raster(aes(x=Year,y=age,fill=value)) +
+  scale_x_continuous("Year",expand=c(0,0),breaks=seq(1900,2010,10)) +
+  scale_y_continuous("Age",expand=c(0,0),breaks=seq(0,100,10),limits=c(0,100)) +
+  scale_fill_viridis("Death\nProbability\nPer Year",trans = "log10",breaks=c(1,0.1,0.01,0.001,0.0001), labels = c("1","1/10","1/100","1/1000","1/10000")) +
+  ggtitle("Death Probability vs Age and Year for the USA") +
+  labs(caption = "Data Source: US Dept. of Social Security")
+
+plot_gg(deathgg, multicore=TRUE,height=5,width=6,scale=500)
+```
+
+
+
+Let us make this plot a 3D plot. It is very simple usinf RayShader Library - pass the ggplot object to plot_gg() function. 
+
+
+
+```{r}
+library(tidyverse)
+measles = read_csv("https://tylermw.com/data/measles_country_2011_2019.csv")
+melt_measles = reshape2::melt(measles, id.vars = c("Year", "Country", "Region", "ISO3"))
+melt_measles$Month = melt_measles$variable
+melt_measles$cases = melt_measles$value
+melt_measles %>% 
+  group_by(Year, Month) %>%
+  summarize(totalcases = sum(cases,na.rm = TRUE)) %>% 
+  mutate(totalcases = ifelse(Year == 2019 & !(Month %in% c("January","February","March")), NA, totalcases)) %>%
+  ggplot() + 
+  geom_tile(aes(x=Year, y=Month, fill=totalcases,color=totalcases),size=1,color="black") + 
+  scale_x_continuous("Year", expand=c(0,0), breaks = seq(2011,2019,1)) +
+  scale_y_discrete("Month", expand=c(0,0)) +
+  scale_fill_viridis("Total\nCases") +
+  ggtitle("Reported Worldwide Measles Cases") +
+  labs(caption = "Data Source: WHO") +
+  theme(axis.text = element_text(size = 12),
+        title = element_text(size = 12,face="bold"),
+        panel.border= element_rect(size=2,color="black",fill=NA)) -> 
+measles_gg
+
+plot_gg(measles_gg, multicore = TRUE, width = 6, height = 5.5, scale = 300, 
+background = "#afceff",shadowcolor = "#3a4f70")
+
+
+```
+
 To download the data from https://movement.uber.com/ - We will look at aggregate data of Travel Times by Hour of Day for all days for Q1 2019
 
 ```{r}
@@ -52,6 +123,9 @@ print("Number of Unique Destination Wards ")
 
 print(length(unique_wards_dst))
 ```
+
+
+
 We will look at what is the Average Travel Time from a particular Ward
 ```{r}
 travel_time=data.table(travel_time)
@@ -117,16 +191,15 @@ gg_src_blr = ggplot(source_blr) +
   theme_bw()
 
 gg_src_blr
-```
-
-Let us make this plot a 3D plot. It is very simple usinf RayShader Library - pass the ggplot object to plot_gg() function. 
-
-```{r}
-plot_gg(gg_src_blr, multicore = TRUE, width = 6 ,height=2.7, fov = 70)
 
 
-render_movie(filename = "plot_1",frames = 480,fps=60,phi=60,theta=45)
+plot_gg(gg_src_blr, multicore = TRUE, width = 6,height=6, fov = 70,scale=100)
+
+
+render_movie(filename = "plot_1_version2",frames = 480,fps=60,phi=60,theta=45)
 
 ```
+
+
 
 
